@@ -1,0 +1,131 @@
+@import "tailwindcss";
+@import "react-grid-layout/css/styles.css";
+@import "react-resizable/css/styles.css";
+
+@theme {
+  --color-bone: #F9F8F4;
+  --color-bone-alt: #F3F1EC;
+  --color-charcoal: #121212;
+  --color-charcoal-muted: #4A4A4A;
+  --color-border: #E5E2DB;
+  
+  --font-serif: "Playfair Display", serif;
+  --font-sans: "Inter", sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-bone);
+    color: var(--color-charcoal);
+    font-family: var(--font-sans);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-serif);
+  }
+}
+
+/* React Grid Layout Overrides */
+.react-grid-item.react-grid-placeholder {
+  background: var(--color-charcoal) !important;
+  opacity: 0.05 !important;
+  border-radius: 0 !important;
+}
+
+.react-grid-item > .react-resizable-handle {
+  width: 16px;
+  height: 16px;
+  bottom: 0;
+  right: 0;
+  background: none;
+  border-bottom: 2px solid var(--color-charcoal-muted);
+  border-right: 2px solid var(--color-charcoal-muted);
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+  cursor: se-resize;
+  margin: 4px;
+}
+
+.react-grid-item:hover > .react-resizable-handle {
+  opacity: 0.5;
+}
+
+.react-grid-item.resizing > .react-resizable-handle {
+  opacity: 1;
+}
+
+.react-resizable-handle::after {
+  display: none !important;
+}
+
+/* Micro-interaction Animations */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes popover-in {
+  from { opacity: 0; transform: scale(0.95) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes check-draw {
+  from { stroke-dashoffset: 20; }
+  to { stroke-dashoffset: 0; }
+}
+
+.animate-toast-in {
+  animation: toast-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-shake {
+  animation: shake 350ms cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+.animate-modal-in {
+  animation: modal-in 250ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-popover-in {
+  animation: popover-in 200ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-backdrop-in {
+  animation: backdrop-in 200ms ease-out forwards;
+}
+
+.animate-check-draw {
+  animation: check-draw 200ms ease-out 50ms forwards;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
