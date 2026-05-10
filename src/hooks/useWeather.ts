@@ -1,111 +1,89 @@
 import { useQuery } from '@tanstack/react-query';
-import { WEATHER_API_KEY, DEFAULT_CITY } from '../lib/constants';
+import { DEFAULT_CITY } from '../lib/constants';
 
-interface CurrentWeather {
-  main: { temp: number; feels_like: number; pressure: number; humidity: number };
-  wind: { speed: number };
-  weather: Array<{ id: number; main: string; description: string; icon: string }>;
-  name: string;
+interface WttrCurrent {
+  temp_C: string;
+  FeelsLikeC: string;
+  humidity: string;
+  windspeedKmph: string;
+  pressure: string;
+  weatherCode: string;
+  weatherDesc: Array<{ value: string }>;
 }
 
-interface ForecastItem {
-  dt: number;
-  main: { temp: number; temp_min: number; temp_max: number; pressure: number; humidity: number };
-  wind: { speed: number };
-  weather: Array<{ id: number; main: string; description: string; icon: string }>;
-  dt_txt: string;
+interface WttrHourly {
+  weatherDesc: Array<{ value: string }>;
+  weatherCode: string;
 }
 
-interface Forecast {
-  list: ForecastItem[];
+interface WttrDay {
+  date: string;
+  maxtempC: string;
+  mintempC: string;
+  hourly: WttrHourly[];
+}
+
+interface WttrNearestArea {
+  areaName: Array<{ value: string }>;
+  country: Array<{ value: string }>;
+}
+
+interface WttrResponse {
+  current_condition: WttrCurrent[];
+  weather: WttrDay[];
+  nearest_area: WttrNearestArea[];
+}
+
+function toCondition(desc: string): string {
+  const lower = desc.toLowerCase();
+  if (lower.includes('rain') || lower.includes('drizzle') || lower.includes('patchy')) return 'Rain';
+  if (lower.includes('snow') || lower.includes('sleet') || lower.includes('blizzard')) return 'Snow';
+  if (lower.includes('thunder') || lower.includes('storm')) return 'Thunderstorm';
+  if (lower.includes('cloud') || lower.includes('overcast')) return 'Clouds';
+  if (lower.includes('fog') || lower.includes('mist') || lower.includes('haze')) return 'Mist';
+  if (lower.includes('clear') || lower.includes('sunny')) return 'Clear';
+  return 'Clouds';
+}
+
+function getDayName(dateStr: string, index: number): string {
+  if (index === 0) return 'Today';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short' });
 }
 
 export function useWeather(city: string = DEFAULT_CITY) {
   return useQuery({
     queryKey: ['weather', city],
     queryFn: async () => {
-      const effectiveKey = (typeof localStorage !== 'undefined' && localStorage.getItem('monolith_owm_key')) || WEATHER_API_KEY;
+      const res = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`);
+      if (!res.ok) throw new Error('Weather fetch failed');
+      const data: WttrResponse = await res.json();
 
-      const [currentRes, forecastRes] = await Promise.all([
-        fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${effectiveKey}`),
-        fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${city}&units=metric&appid=${effectiveKey}`)
-      ]);
+      const c = data.current_condition[0];
+      const desc = c.weatherDesc[0]?.value || 'Clear';
+      const location = data.nearest_area[0]?.areaName[0]?.value || city;
 
-      if (!currentRes.ok || !forecastRes.ok) {
-        console.warn('Weather API failed, likely due to a new or invalid API key. Falling back to mock data.');
-        const nextDays = Array.from({length: 5}).map((_, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() + i + 1);
-          return d;
-        });
-
-        return {
-          current: {
-            temp: 18,
-            feelsLike: 17,
-            condition: 'Clear',
-            icon: '01d',
-            location: city || DEFAULT_CITY,
-            humidity: 53,
-            windSpeed: 4.1,
-            pressure: 1013,
-            isMock: true
-          },
-          forecast: nextDays.map(date => ({
-            date: date.toISOString().split('T')[0],
-            dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
-            min: 12 + Math.floor(Math.random() * 5),
-            max: 20 + Math.floor(Math.random() * 5),
-            condition: ['Clear', 'Clouds', 'Rain'][Math.floor(Math.random() * 3)],
-            icon: '01d'
-          }))
-        };
-      }
-
-      const current: CurrentWeather = await currentRes.json();
-      const forecast: Forecast = await forecastRes.json();
-
-      const dailyForecasts = new Map<string, { min: number; max: number; weather: any }>();
-      const today = new Date().toISOString().split('T')[0];
-
-      for (const item of forecast.list) {
-        const date = item.dt_txt.split(' ')[0];
-        if (date === today) continue;
-        if (dailyForecasts.size >= 5 && !dailyForecasts.has(date)) break;
-        if (!dailyForecasts.has(date)) {
-          dailyForecasts.set(date, {
-            min: item.main.temp_min,
-            max: item.main.temp_max,
-            weather: item.weather[0],
-          });
-        } else {
-          const existing = dailyForecasts.get(date)!;
-          existing.min = Math.min(existing.min, item.main.temp_min);
-          existing.max = Math.max(existing.max, item.main.temp_max);
-        }
-      }
-
-      return {
-        current: {
-          temp: Math.round(current.main.temp),
-          feelsLike: Math.round(current.main.feels_like),
-          condition: current.weather[0].main,
-          icon: current.weather[0].icon,
-          location: current.name,
-          humidity: current.main.humidity,
-          windSpeed: current.wind.speed,
-          pressure: current.main.pressure,
-          isMock: false,
-        },
-        forecast: Array.from(dailyForecasts.entries()).map(([date, data]) => ({
-          date,
-          dayName: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
-          min: Math.round(data.min),
-          max: Math.round(data.max),
-          condition: data.weather.main,
-          icon: data.weather.icon
-        }))
+      const current = {
+        temp: Math.round(Number(c.temp_C)),
+        feelsLike: Math.round(Number(c.FeelsLikeC)),
+        condition: toCondition(desc),
+        location,
+        humidity: Number(c.humidity),
+        windSpeed: Math.round(Number(c.windspeedKmph) / 3.6 * 10) / 10,
+        pressure: Number(c.pressure),
       };
+
+      const forecast = data.weather
+        .slice(0, 5)
+        .map((w, i) => ({
+          date: w.date,
+          dayName: getDayName(w.date, i),
+          min: Math.round(Number(w.mintempC)),
+          max: Math.round(Number(w.maxtempC)),
+          condition: toCondition(w.hourly[4]?.weatherDesc[0]?.value || 'Clear'),
+        }));
+
+      return { current, forecast };
     },
     refetchInterval: 5 * 60 * 1000,
   });

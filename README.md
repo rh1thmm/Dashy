@@ -9,7 +9,7 @@
 - **4×4 grid** — fixed viewport-filling layout, no scrolling
 - **3 widget tiers** — compact (1×1), standard (2–8 area), expanded (9+ area)
 - **Clock** — analog SVG face + digital 12h time + date + greeting; configurable timezone
-- **Weather** — current conditions + forecast; OpenWeatherMap-backed with mock fallback
+- **Weather** — current conditions + 3-day forecast; powered by wttr.in (no API key needed)
 - **Tasks** — checklist with progress bar; auto-removal after configurable delay
 - **Actions** — fire arbitrary HTTP requests from user-configured trigger buttons
 - **Persistent** — layout, backgrounds, grid settings, and widget configs saved to localStorage
@@ -29,7 +29,7 @@
 | Icons | @phosphor-icons/react |
 | Data | @tanstack/react-query |
 | Fonts | Playfair Display + Inter (Google Fonts) |
-| Weather | OpenWeatherMap API |
+| Weather | wttr.in |
 
 ## Install
 
@@ -73,16 +73,15 @@ npm run preview
 | Widget | Compact (1×1) | Standard (2–8) | Expanded (9+) |
 |--------|---------------|-----------------|---------------|
 | **Clock** | Analog clock face | + digital time + date | + greeting |
-| **Weather** | Temp + icon | + location + 3-day forecast | + feelsLike/humidity/wind/pressure + 5-day forecast |
+| **Weather** | Temp + icon | + location + 3-day forecast | + feelsLike/humidity/wind/pressure + 3-day forecast |
 | **Tasks** | Done/total count + progress bar | Checklist (5 items) with inline add | Full list + inline add |
 | **Actions** | Count + first trigger name | Scrollable list with method/status | 2-column card grid |
 
 ## Configuration
 
 ### Weather
-- Default city: Calgary
-- API key stored in browser — set your own in the Weather Gear modal, or use the built-in key
-- Falls back to mock data on fetch failure
+- Default city: Calgary — change in the Weather Gear modal
+- Powered by wttr.in (no API key required)
 
 ### Tasks
 - Remove completed tasks: Never / Instantly / After 1h / After 1d
@@ -107,10 +106,7 @@ npm run preview
 
 ## Data Persistence
 
-All state is stored in `localStorage` under two keys:
-
-- `monolith_dashboard_state` — widgets, layout, background, grid, noise settings
-- `monolith_owm_key` — optional OpenWeatherMap API key override
+All state is stored in `localStorage` under `monolith_dashboard_state` — widgets, layout, background, grid, noise settings.
 
 No backend or server-side storage required.
 

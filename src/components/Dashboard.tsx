@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { GridLayout } from 'react-grid-layout';
 import { useWindowSize } from '../hooks/useWindowSize';
-import { useQueryClient } from '@tanstack/react-query';
 import type { WidgetData, WidgetTier, TriggerButton } from '../types';
 import { Tile } from './Tile';
 import { Clock } from './Clock';
@@ -113,8 +112,6 @@ export function Dashboard() {
   const [showNoise, setShowNoise] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'success'|'error'|'info'} | null>(null);
   const [activePopover, setActivePopover] = useState<'add' | 'canvas' | null>(null);
-
-  const queryClient = useQueryClient();
 
   const showToast = (message: string, type: 'success'|'error'|'info' = 'info') => {
     setToast({ message, type });
@@ -547,32 +544,6 @@ export function Dashboard() {
                     }}
                   />
                   <span className="font-sans text-[10px] opacity-40">Press Enter to save</span>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="font-sans text-xs uppercase tracking-wider opacity-60">OpenWeather API Key</label>
-                  <input
-                    type="text"
-                    defaultValue={typeof localStorage !== 'undefined' ? localStorage.getItem('monolith_owm_key') || '' : ''}
-                    placeholder="Enter API key"
-                    className="bg-transparent border-[1px] border-border p-2 font-sans text-sm outline-none focus:border-charcoal transition-colors"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        const val = (e.currentTarget as HTMLInputElement).value.trim();
-                        try {
-                          if (typeof localStorage !== 'undefined') {
-                            if (val) localStorage.setItem('monolith_owm_key', val);
-                            else localStorage.removeItem('monolith_owm_key');
-                          }
-                          queryClient.invalidateQueries({ queryKey: ['weather'] });
-                          showToast(val ? 'Weather key saved' : 'Weather key cleared', 'success');
-                          setEditingWidget(null);
-                        } catch (err) {
-                          showToast('Failed to save key', 'error');
-                        }
-                      }
-                    }}
-                  />
-                  <span className="font-sans text-[10px] opacity-40">Press Enter to save. Stored locally only.</span>
                 </div>
               </div>
             )}

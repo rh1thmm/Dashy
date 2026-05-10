@@ -30,9 +30,6 @@ export function Weather({ city, tier = 'compact' }: { city?: string; tier?: Widg
   if (tier === 'compact') {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full relative">
-        {data.current.isMock && (
-          <div className="absolute top-1 left-1 bg-yellow-200 text-yellow-900 text-[10px] px-2 py-0.5 tracking-widest font-sans">MOCK</div>
-        )}
         <div className="flex items-center gap-2">
           <span className="font-serif text-4xl font-normal tracking-tighter">{data.current.temp}°</span>
           {getWeatherIcon(data.current.condition, true, true)}
@@ -43,10 +40,6 @@ export function Weather({ city, tier = 'compact' }: { city?: string; tier?: Widg
 
   return (
     <div className="flex flex-col w-full h-full justify-between items-center py-2 relative">
-      {data.current.isMock && (
-        <div className="absolute top-1 left-1 bg-yellow-200 text-yellow-900 text-[10px] px-2 py-0.5 tracking-widest font-sans">MOCK</div>
-      )}
-
       <div className="flex flex-col items-center mt-2">
         <div className="flex items-center gap-4">
           <span className={`font-serif font-normal tracking-tighter ${tier === 'expanded' ? 'text-7xl' : 'text-6xl'}`}>
