@@ -2,7 +2,7 @@
 
 > Quiet-luxury 4×4 dashboard with Clock, Weather, Tasks, and HTTP Trigger widgets.
 
-![dashy screenshot](/dashy-screenshot.png)
+![dashy screenshot](https://github.com/rh1thmm/Dashy/blob/main/public/dashy-screenshot.png?raw=true)
 
 ## Features
 
