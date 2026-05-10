@@ -3,6 +3,9 @@ dist
 dist-ssr
 *.local
 *.log
+.npmrc
+.env
+.env.*
 .DS_Store
 .vscode
 .idea

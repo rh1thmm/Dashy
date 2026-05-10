@@ -31,20 +31,31 @@
 | Fonts | Playfair Display + Inter (Google Fonts) |
 | Weather | OpenWeatherMap API |
 
-## Getting Started
+## Install
+
+### Global (recommended)
 
 ```sh
+npm install -g @rh1thmm/dashy
+dashy
+```
+
+Starts on port 4200. Use `PORT=3000 dashy` to change the port.
+
+### From source
+
+```sh
+git clone https://github.com/rh1thmm/dashy.git
+cd dashy
 npm install
 npm run dev
 ```
-
-Starts on port 4200 with automatic fallback if taken.
 
 ### Build for production
 
 ```sh
 npm run build
-npm run preview   # serve the built app locally
+npm run preview
 ```
 
 ## Usage

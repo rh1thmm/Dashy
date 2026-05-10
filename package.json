@@ -1,16 +1,31 @@
 {
-  "name": "dashy",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@rh1thmm/dashy",
+  "description": "Quiet-luxury 4×4 dashboard with Clock, Weather, Tasks, and HTTP Trigger widgets",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rh1thmm/dashy.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "version": "1.0.0",
   "type": "module",
+  "bin": {
+    "dashy": "bin/dashy.js"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "postinstall": "node bin/build.js",
     "preview": "vite preview"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
+    "@rh1thmm/dashy": "^1.0.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-query": "^5.100.9",
     "react": "^19.2.5",
