@@ -51,6 +51,18 @@ npm install
 npm run dev
 ```
 
+### Update
+
+```sh
+npm update -g @rh1thmm/dashy
+```
+
+Or to pin a specific version:
+
+```sh
+npm install -g @rh1thmm/dashy@1.1.0
+```
+
 ### Build for production
 
 ```sh
