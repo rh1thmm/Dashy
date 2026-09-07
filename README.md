@@ -33,55 +33,23 @@
 | Fonts | Playfair Display + Inter (Google Fonts) |
 | Weather | wttr.in |
 
-## Install
-
-### Global (recommended)
-
-```sh
-npm install -g @rh1thmm/dashy
-dashy
-```
-
-Starts on port 4200. Use `PORT=3000 dashy` to change the port.
-
-### From source
+## Run locally
 
 ```sh
 git clone https://github.com/rh1thmm/dashy.git
 cd dashy
 npm install
+npm run build
+./start
+```
+
+Dashy starts on port 4200. Use `PORT=3000 ./start` to change the port. The `./start` launcher builds automatically when `dist/` is missing.
+
+### Development
+
+```sh
 npm run dev
 ```
-
-### Update
-
-```sh
-npm update -g @rh1thmm/dashy
-```
-
-Or to pin a specific version:
-
-```sh
-npm install -g @rh1thmm/dashy@1.1.0
-```
-
-### Build for production
-
-```sh
-npm run build
-npm run preview
-```
-
-## Publish to npm
-
-Pushing a tag matching the package version publishes a release automatically. For example, after changing `package.json` to `1.2.0`:
-
-```sh
-git tag v1.2.0
-git push origin v1.2.0
-```
-
-Before the first release, configure npm trusted publishing for `@rh1thmm/dashy` in npm package settings: select GitHub Actions, repository `rh1thmm/Dashy`, workflow `.github/workflows/publish-npm.yml`, and environment `npm`. The workflow verifies the tag/version match, builds the app, and publishes with npm provenance. No `NPM_TOKEN` is required.
 
 ## Usage
 
@@ -106,7 +74,7 @@ Before the first release, configure npm trusted publishing for `@rh1thmm/dashy` 
 ## Configuration
 
 ### Weather
-- Default city: Calgary — change in the Weather Gear modal
+- Default city: Calgary — choose an unambiguous city and country in Settings
 - Powered by wttr.in (no API key required)
 
 ### Tasks
@@ -129,21 +97,17 @@ Before the first release, configure npm trusted publishing for `@rh1thmm/dashy` 
 - Start, pause, and end sessions; elapsed time and checkpoints survive refreshes
 - Streaks count consecutive completed workout days while ignoring scheduled rest days
 
-### Canvas
+### Appearance
 | Option | Values |
 |--------|--------|
-| Background | Bone, Blush, Cream, Peach, Sage, Sky, Lavender, Charcoal, Navy |
+| Colors | Custom canvas, tile, ink, muted ink, and grid colors |
 | Grid line style | Solid, Dashed, Dotted, Hidden |
 | Grid line weight | Thin (0.5px), Normal (1px) |
 | Noise overlay | On / Off (2.5% opacity, multiply blend) |
 
-## Keyboard
-
-- `Escape` — close any open settings modal
-
 ## Data Persistence
 
-Dashy stores all dashboard state in SQLite at `~/.dashy/dashy.sqlite`, created automatically the first time `dashy` or `npm run dev` starts. Set `DASHY_DATA_DIR` to place the database elsewhere. Existing `localStorage` state is imported once on upgrade and then removed from the browser.
+Dashy stores all dashboard state in SQLite at `~/.dashy/dashy.sqlite`, created automatically the first time `./start` or `npm run dev` starts. Set `DASHY_DATA_DIR` to place the database elsewhere. Existing `localStorage` state is imported once on upgrade and then removed from the browser.
 
 The built-in SQLite driver requires Node.js 22.5 or newer. The data directory and database are restricted to the current user because widget configuration can contain sensitive request headers.
 

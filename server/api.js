@@ -102,7 +102,7 @@ const dockerStatus = async () => {
   }
 };
 
-/** Shared API for both the packaged server and Vite development server. */
+/** Shared API for both the self-hosted server and Vite development server. */
 export function createDashyApiHandler({ dataDirectory = process.env.DASHY_DATA_DIR || join(homedir(), '.dashy') } = {}) {
   mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
   const databasePath = join(dataDirectory, 'dashy.sqlite');

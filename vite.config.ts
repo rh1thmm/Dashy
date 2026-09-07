@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { createDashyApiHandler } from './bin/api.js'
+import { createDashyApiHandler } from './server/api.js'
 
 export default defineConfig({
   plugins: [
