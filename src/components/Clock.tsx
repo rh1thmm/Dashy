@@ -1,6 +1,36 @@
 import { useEffect, useState } from 'react';
 import type { WidgetTier } from '../types';
 
+function systemTimezone(): string | undefined {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function useAutomaticTimezone(requestedTimezone?: string): string {
+  const systemZone = systemTimezone();
+  const [locationZone, setLocationZone] = useState<string>();
+
+  useEffect(() => {
+    if (requestedTimezone && requestedTimezone !== 'auto' || !navigator.geolocation || !navigator.permissions) return;
+    let cancelled = false;
+    navigator.permissions.query({ name: 'geolocation' }).then(permission => {
+      if (permission.state !== 'granted') return;
+      navigator.geolocation.getCurrentPosition(async position => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&timezone=auto&forecast_days=1`);
+          const data = await response.json() as { timezone?: string };
+          if (!cancelled && data.timezone) setLocationZone(data.timezone);
+        } catch { /* System timezone remains the reliable fallback. */ }
+      });
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [requestedTimezone]);
+
+  if (requestedTimezone && requestedTimezone !== 'auto') return requestedTimezone;
+  // If location and system disagree, the system's configured clock wins.
+  return systemZone || locationZone || 'UTC';
+}
+
 function getGreeting(hour: number): string {
   if (hour < 12) return 'GOOD MORNING';
   if (hour < 17) return 'GOOD AFTERNOON';
@@ -29,7 +59,7 @@ function formatDate(time: Date, tz: string) {
 }
 
 export function Clock({ tier = 'compact', timezone }: { tier?: WidgetTier; timezone?: string }) {
-  const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tz = useAutomaticTimezone(timezone);
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -43,7 +73,9 @@ export function Clock({ tier = 'compact', timezone }: { tier?: WidgetTier; timez
   const digital = formatDigital(time, tz);
 
   const seconds = time.getSeconds();
-  const secondAngle = seconds * 6;
+  // Keep the rotation monotonically increasing. Using only 0–59 seconds made
+  // 59 → 00 interpolate backwards across the entire clock face.
+  const secondAngle = Math.floor(time.getTime() / 1000) * 6;
   const minuteAngle = parseInt(minutes, 10) * 6 + seconds * 0.1;
   const hourAngle = (hours % 12) * 30 + parseInt(minutes, 10) * 0.5;
 

@@ -1,13 +1,25 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { GridLayout } from 'react-grid-layout';
 import { useWindowSize } from '../hooks/useWindowSize';
-import type { WidgetData, WidgetTier, TriggerButton } from '../types';
+import type { ThemeConfig, TrainingConfig, TrainingScheduleDay, WidgetData, WidgetTier, TriggerButton } from '../types';
 import { Tile } from './Tile';
 import { Clock } from './Clock';
 import { Weather } from './Weather';
 import { Tasks } from './Tasks';
 import { TriggerButtons } from './TriggerButtons';
-import { PencilSimple, Plus, Check, X, Gear, Palette } from '@phosphor-icons/react';
+import { DockerStatus } from './DockerStatus';
+import { Training } from './Training';
+import { Settings } from './Settings';
+import { DAY_NAMES, createTrainingConfig, normalizeTrainingConfig } from '../lib/training';
+import { PencilSimple, Plus, Check, X, Gear } from '@phosphor-icons/react';
+import {
+  clearDashboardState,
+  clearLegacyDashboardState,
+  loadDashboardState,
+  readLegacyDashboardState,
+  saveDashboardState,
+  type PersistedDashboardState,
+} from '../lib/dashboardStorage';
 
 const BACKGROUNDS = [
   { id: 'bone', name: 'Bone', class: 'bg-bone', border: '#E5E2DB' },
@@ -22,6 +34,7 @@ const BACKGROUNDS = [
 ];
 
 const DEFAULT_TIMEZONE = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
+const DEFAULT_THEME: ThemeConfig = { canvas: '#F9F8F4', surface: '#F3F1EC', ink: '#121212', muted: '#4A4A4A', grid: '#E5E2DB' };
 
 const REMOVE_OPTIONS = [
   { value: 'never', label: 'Never' },
@@ -50,7 +63,7 @@ const TIMEZONES = [
 ];
 
 const INITIAL_WIDGETS: WidgetData[] = [
-  { id: 'clock-1', type: 'clock', config: { timezone: DEFAULT_TIMEZONE } },
+  { id: 'clock-1', type: 'clock', config: { timezone: 'auto' } },
   { id: 'weather-1', type: 'weather', config: { city: 'Calgary' } },
   { id: 'triggers-1', type: 'triggers', config: { triggers: [
     { id: 't1', label: 'Status Ping', url: 'https://httpbin.org/get', method: 'GET' },
@@ -88,14 +101,19 @@ const INITIAL_LAYOUT: MyLayout[] = [
   { i: 'tasks-1', x: 3, y: 0, w: 1, h: 1 },
 ];
 
-const STORAGE_KEY = 'monolith_dashboard_state';
-
 const blockCompactor = {
   type: null as any,
   allowOverlap: false,
   preventCollision: true,
   compact: (layout: any) => layout,
 };
+
+function tierForWidget(widget: WidgetData, layout: MyLayout[]): WidgetTier {
+  const item = layout.find(item => item.i === widget.id);
+  const area = (item?.w || 1) * (item?.h || 1);
+  if (area >= 9) return 'expanded';
+  return area >= 2 ? 'standard' : 'compact';
+}
 
 export function Dashboard() {
   const windowSize = useWindowSize();
@@ -105,61 +123,91 @@ export function Dashboard() {
   const [layout, setLayout] = useState<MyLayout[]>(INITIAL_LAYOUT);
   const [editingWidget, setEditingWidget] = useState<string | null>(null);
   const [appBackground, setAppBackground] = useState<string>('bg-bone');
-  const [gridLineColor, setGridLineColor] = useState<string>('#E5E2DB');
   const [gridLineWeight, setGridLineWeight] = useState<'thin' | 'normal'>('normal');
   const [gridLineStyle, setGridLineStyle] = useState<'solid' | 'dashed' | 'dotted' | 'hidden'>('solid');
   const [canvasInset, setCanvasInset] = useState<number>(0);
   const [showNoise, setShowNoise] = useState(false);
+  const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'success'|'error'|'info'} | null>(null);
   const [activePopover, setActivePopover] = useState<'add' | 'canvas' | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (message: string, type: 'success'|'error'|'info' = 'info') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
   };
 
   const togglePopover = (name: 'add' | 'canvas') => {
     setActivePopover(prev => prev === name ? null : name);
   };
 
-  // Load from local storage on mount
+  // The launcher creates the SQLite database on first use. Import legacy browser
+  // state once so upgrades retain the user's existing layout and configuration.
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.widgets && parsed.layout) {
-          setWidgets(parsed.widgets);
-          setLayout(parsed.layout);
-        }
-        if (parsed.appBackground) {
-          setAppBackground(parsed.appBackground);
-          const bg = BACKGROUNDS.find(b => b.class === parsed.appBackground);
-          if (bg) setGridLineColor(bg.border);
-        }
-        if (parsed.gridLineWeight) setGridLineWeight(parsed.gridLineWeight);
-        if (parsed.gridLineStyle) setGridLineStyle(parsed.gridLineStyle);
-        if (parsed.canvasInset != null) setCanvasInset(parsed.canvasInset);
-        if (parsed.showNoise != null) setShowNoise(parsed.showNoise);
-      } catch (e) {
-        console.error('Failed to parse dashboard state', e);
+    let cancelled = false;
+    const applyState = (parsed: PersistedDashboardState) => {
+      if (parsed.widgets && parsed.layout) {
+        setWidgets(parsed.widgets as WidgetData[]);
+        setLayout(parsed.layout as MyLayout[]);
       }
-    }
-    setIsLoaded(true);
+      if (parsed.appBackground) {
+        setAppBackground(parsed.appBackground);
+        const bg = BACKGROUNDS.find(b => b.class === parsed.appBackground);
+        if (bg) setTheme(current => ({ ...current, grid: bg.border }));
+      }
+      if (parsed.gridLineWeight) setGridLineWeight(parsed.gridLineWeight);
+      if (parsed.gridLineStyle) setGridLineStyle(parsed.gridLineStyle);
+      if (parsed.canvasInset != null) setCanvasInset(parsed.canvasInset);
+      if (parsed.showNoise != null) setShowNoise(parsed.showNoise);
+      if (parsed.theme) {
+        setTheme(parsed.theme);
+      }
+    };
+
+    const load = async () => {
+      try {
+        const databaseState = await loadDashboardState();
+        if (cancelled) return;
+        if (databaseState) {
+          applyState(databaseState);
+        } else {
+          const legacyState = readLegacyDashboardState();
+          if (legacyState) {
+            applyState(legacyState);
+            await saveDashboardState(legacyState);
+            clearLegacyDashboardState();
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load dashboard state', error);
+      } finally {
+        if (!cancelled) setIsLoaded(true);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
 
-  // Save to local storage whenever widgets or layout change
+  // Batch rapid drag, resize, and color updates before committing to SQLite.
   useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ widgets, layout, appBackground, gridLineWeight, gridLineStyle, canvasInset, showNoise }));
-    }
-  }, [widgets, layout, appBackground, gridLineWeight, gridLineStyle, canvasInset, showNoise, isLoaded]);
+    if (!isLoaded) return;
+    const timer = setTimeout(() => {
+      saveDashboardState({ widgets, layout, appBackground, gridLineWeight, gridLineStyle, canvasInset, showNoise, theme }).catch(error => {
+        console.error('Failed to save dashboard state', error);
+      });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [widgets, layout, appBackground, gridLineWeight, gridLineStyle, canvasInset, showNoise, theme, isLoaded]);
+
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   // Auto-hide cursor after 5s of inactivity (skip in edit mode)
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const hide = () => {
-      if (!isEditMode) document.body.style.cursor = 'none';
+      if (!isEditMode && !isSettingsOpen) document.body.style.cursor = 'none';
     };
     const show = () => {
       document.body.style.cursor = '';
@@ -175,7 +223,7 @@ export function Dashboard() {
       window.removeEventListener('mouseenter', show);
       document.body.style.cursor = '';
     };
-  }, [isEditMode]);
+  }, [isEditMode, isSettingsOpen]);
 
   // Close settings modal on Escape
   useEffect(() => {
@@ -198,27 +246,25 @@ export function Dashboard() {
   const lineWidth = gridLineWeight === 'thin' ? '0.5px' : '1px';
   const lineStyle = gridLineStyle === 'hidden' ? 'none' : gridLineStyle;
   
-  const getWidgetTitle = (type: string, config?: any) => {
+  const getWidgetTitle = (type: string, config?: any, tier?: WidgetTier) => {
     switch (type) {
       case 'clock': {
         const tz = config?.timezone;
-        return tz && tz !== DEFAULT_TIMEZONE ? tz : 'Local';
+        if (tier === 'compact') return '';
+        if (!tz || tz === 'auto' || tz === DEFAULT_TIMEZONE) return 'Local';
+        return tz.split('/').at(-1)?.replaceAll('_', ' ') || tz;
       }
       case 'weather': return 'Atmosphere';
       case 'tasks': return 'Tasks';
       case 'triggers': return 'Actions';
+      case 'docker': return 'Docker';
+      case 'training': return 'Training';
       default: return '';
     }
   };
 
   const renderWidget = (widget: WidgetData) => {
-    const item = layout.find(l => l.i === widget.id);
-    const w = item?.w || 1;
-    const h = item?.h || 1;
-    const area = w * h;
-    let tier: WidgetTier = 'compact';
-    if (area >= 9) tier = 'expanded';
-    else if (area >= 2) tier = 'standard';
+    const tier = tierForWidget(widget, layout);
     switch (widget.type) {
       case 'clock': return <Clock tier={tier} timezone={widget.config?.timezone} />;
       case 'weather': return <Weather city={widget.config?.city} tier={tier} />;
@@ -236,6 +282,15 @@ export function Dashboard() {
         <TriggerButtons
           tier={tier}
           triggers={widget.config?.triggers}
+        />
+      );
+      case 'docker': return <DockerStatus tier={tier} />;
+      case 'training': return (
+        <Training
+          tier={tier}
+          config={widget.config}
+          onChange={(config) => setWidgets(prev => prev.map(w => w.id === widget.id ? { ...w, config } : w))}
+          onToast={(message) => showToast(message, 'info')}
         />
       );
       default: return null;
@@ -272,8 +327,9 @@ export function Dashboard() {
     setWidgets(prev => [...prev, {
       id, type,
       config: type === 'weather' ? { city: 'Calgary' } :
-              type === 'clock' ? { timezone: DEFAULT_TIMEZONE } :
+              type === 'clock' ? { timezone: 'auto' } :
               type === 'tasks' ? { removeAfter: 'never' } :
+              type === 'training' ? createTrainingConfig() :
               {}
     }]);
     setLayout(prev => [...prev, { i: id, x: newX, y: newY, w: 1, h: 1 }]);
@@ -288,6 +344,24 @@ export function Dashboard() {
     setLayout(newLayout);
   };
 
+  const clearAllData = async () => {
+    try {
+      await clearDashboardState();
+      setWidgets(INITIAL_WIDGETS);
+      setLayout(INITIAL_LAYOUT);
+      setAppBackground('bg-bone');
+      setGridLineWeight('normal');
+      setGridLineStyle('solid');
+      setCanvasInset(0);
+      setShowNoise(false);
+      setTheme(DEFAULT_THEME);
+      setIsSettingsOpen(false);
+      showToast('Dashboard reset', 'success');
+    } catch {
+      showToast('Unable to clear dashboard data', 'error');
+    }
+  };
+
   // Background 16 tiles to keep the pure grid look
   const backgroundTiles = useMemo(() => (
     <div 
@@ -295,19 +369,21 @@ export function Dashboard() {
       style={{ width, height }}
     >
       {Array.from({ length: 16 }).map((_, i) => (
-        <div key={i} style={{ borderBottom: `${lineWidth} ${lineStyle} ${gridLineColor}`, borderRight: `${lineWidth} ${lineStyle} ${gridLineColor}` }} className={`w-full h-full ${appBackground}`} />
+        <div key={i} style={{ backgroundColor: theme.canvas, borderBottom: `${lineWidth} ${lineStyle} ${theme.grid}`, borderRight: `${lineWidth} ${lineStyle} ${theme.grid}` }} className="w-full h-full" />
       ))}
     </div>
-  ), [width, height, appBackground, gridLineColor, lineWidth, lineStyle]);
+  ), [width, height, theme.canvas, theme.grid, lineWidth, lineStyle]);
 
   if (!isLoaded) return <div className={`w-dvw h-dvh ${appBackground}`} />; // Prevent flash of default layout
 
+  if (isSettingsOpen) return <Settings widgets={widgets} setWidgets={setWidgets} theme={theme} setTheme={setTheme} gridLineWeight={gridLineWeight} setGridLineWeight={setGridLineWeight} gridLineStyle={gridLineStyle} setGridLineStyle={setGridLineStyle} showNoise={showNoise} setShowNoise={setShowNoise} onClose={() => setIsSettingsOpen(false)} onClear={clearAllData} />;
+
   return (
-    <div className={`flex items-center justify-center w-dvw h-dvh overflow-hidden ${appBackground}`}>
+    <div className="flex items-center justify-center w-dvw h-dvh overflow-hidden bg-bone" style={{ '--color-bone': theme.canvas, '--color-bone-alt': theme.surface, '--color-charcoal': theme.ink, '--color-charcoal-muted': theme.muted, '--color-border': theme.grid } as React.CSSProperties}>
       <div style={{ padding: canvasInset || undefined }}>
       <div 
         className="relative"
-        style={{ width, height, borderTop: `${lineWidth} ${lineStyle} ${gridLineColor}`, borderLeft: `${lineWidth} ${lineStyle} ${gridLineColor}` }}
+        style={{ width, height, borderTop: `${lineWidth} ${lineStyle} ${theme.grid}`, borderLeft: `${lineWidth} ${lineStyle} ${theme.grid}` }}
       >
         {backgroundTiles}
 
@@ -334,9 +410,9 @@ export function Dashboard() {
               onLayoutChange={onLayoutChange as any}
             >
               {widgets.map(widget => (
-                <div key={widget.id} className="relative group p-[2px]" style={{ borderBottom: `${lineWidth} ${lineStyle} ${gridLineColor}`, borderRight: `${lineWidth} ${lineStyle} ${gridLineColor}` }}>
+                <div key={widget.id} className="relative group p-[2px]" style={{ borderBottom: `${lineWidth} ${lineStyle} ${theme.grid}`, borderRight: `${lineWidth} ${lineStyle} ${theme.grid}` }}>
                   <div className="bg-bone-alt w-full h-full relative overflow-hidden transition-all duration-150 ease-out group-hover:shadow-sm border-[1px] border-transparent">
-                    <Tile title={getWidgetTitle(widget.type, widget.config)} className="w-full h-full border-none bg-transparent">
+                    <Tile title={getWidgetTitle(widget.type, widget.config, tierForWidget(widget, layout))} className="w-full h-full border-none bg-transparent">
                       {renderWidget(widget)}
                     </Tile>
                     
@@ -346,14 +422,6 @@ export function Dashboard() {
                     )}
                     {isEditMode && (
                       <div className="absolute top-2 right-2 flex gap-1 z-10">
-                        {(widget.type === 'weather' || widget.type === 'clock' || widget.type === 'tasks' || widget.type === 'triggers') && (
-                          <button 
-                            onClick={() => setEditingWidget(widget.id)}
-                            className="p-1.5 bg-bone border-[1px] border-border text-charcoal hover:bg-bone-alt active:scale-[0.97] transition-all duration-100 ease-out cursor-pointer"
-                          >
-                            <Gear size={14} weight="thin" />
-                          </button>
-                        )}
                         <button 
                           onClick={() => removeWidget(widget.id)}
                           className="p-1.5 bg-bone border-[1px] border-border text-charcoal hover:bg-red-200 hover:text-red-800 active:scale-[0.97] transition-all duration-100 ease-out cursor-pointer"
@@ -400,21 +468,27 @@ export function Dashboard() {
                       <button onClick={() => { addWidget('tasks'); setActivePopover(null); }} className="text-left font-sans text-sm tracking-wide hover:translate-x-[2px] active:scale-[0.97] transition-all duration-100 ease-out flex items-center gap-2.5 group">
                         <Plus size={13} weight="thin" className="opacity-30 group-hover:opacity-70 transition-opacity duration-100" /> Tasks
                       </button>
+                      <button onClick={() => { addWidget('docker'); setActivePopover(null); }} className="text-left font-sans text-sm tracking-wide hover:translate-x-[2px] active:scale-[0.97] transition-all duration-100 ease-out flex items-center gap-2.5 group">
+                        <Plus size={13} weight="thin" className="opacity-30 group-hover:opacity-70 transition-opacity duration-100" /> Docker
+                      </button>
+                      <button onClick={() => { addWidget('training'); setActivePopover(null); }} className="text-left font-sans text-sm tracking-wide hover:translate-x-[2px] active:scale-[0.97] transition-all duration-100 ease-out flex items-center gap-2.5 group">
+                        <Plus size={13} weight="thin" className="opacity-30 group-hover:opacity-70 transition-opacity duration-100" /> Training
+                      </button>
                     </div>
                   </div>
                 </>
               )}
             </div>
 
-            {/* Palette — Canvas */}
+            {/* Settings */}
             <div className="relative">
               <button
-                onClick={() => togglePopover('canvas')}
-                className={`w-9 h-9 flex items-center justify-center bg-bone border-[1px] border-border shadow-lg hover:bg-bone-alt hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.95] transition-all duration-100 ease-out cursor-pointer ${activePopover === 'canvas' ? 'ring-1 ring-charcoal/30' : ''}`}
+                onClick={() => { setIsSettingsOpen(true); setActivePopover(null); }}
+                className="w-9 h-9 flex items-center justify-center bg-bone border-[1px] border-border shadow-lg hover:bg-bone-alt hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.95] transition-all duration-100 ease-out cursor-pointer"
               >
-                <Palette size={16} weight="thin" />
+                <Gear size={16} weight="thin" />
               </button>
-              {activePopover === 'canvas' && (
+              {isSettingsOpen && activePopover === 'canvas' && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setActivePopover(null)} />
                   <div className="absolute bottom-full right-0 mb-2 z-40 p-5 bg-bone border-[1px] border-border shadow-2xl w-[208px] animate-popover-in">
@@ -426,7 +500,7 @@ export function Dashboard() {
                         <button
                           key={bg.id}
                           title={bg.name}
-                          onClick={() => { setAppBackground(bg.class); setGridLineColor(bg.border); }}
+                          onClick={() => { setAppBackground(bg.class); setTheme(current => ({ ...current, grid: bg.border })); }}
                           className={`w-[18px] h-[18px] rounded-full border-[1px] border-border cursor-pointer transition-all duration-100 ease-out hover:scale-110 active:scale-95 ${bg.class} ${appBackground === bg.class ? 'ring-[2.5px] ring-charcoal ring-offset-[2.5px] ring-offset-bone' : ''}`}
                         />
                       ))}
@@ -605,10 +679,45 @@ export function Dashboard() {
               
               />
             )}
+            {widgets.find(w => w.id === editingWidget)?.type === 'training' && (
+              <TrainingEditor
+                config={normalizeTrainingConfig(widgets.find(w => w.id === editingWidget)?.config)}
+                onChange={(config) => setWidgets(prev => prev.map(w => w.id === editingWidget ? { ...w, config } : w))}
+              />
+            )}
 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TrainingEditor({ config, onChange }: { config: TrainingConfig; onChange: (config: TrainingConfig) => void }) {
+  const updateDay = (day: number, patch: Partial<TrainingScheduleDay>) => {
+    onChange({ ...config, schedule: config.schedule.map(item => item.day === day ? { ...item, ...patch } : item) });
+  };
+
+  return (
+    <div className="flex flex-col gap-5 max-h-[65vh] overflow-y-auto pr-1">
+      <div className="flex flex-col gap-2">
+        <label className="font-sans text-xs uppercase tracking-wider opacity-60">Reminder time</label>
+        <input type="time" value={config.reminderTime} onChange={e => onChange({ ...config, reminderTime: e.target.value })} className="bg-transparent border-[1px] border-border p-2 font-sans outline-none focus:border-charcoal transition-colors" />
+      </div>
+      <label className="flex items-center justify-between gap-4 font-sans text-xs uppercase tracking-wider opacity-60 cursor-pointer">
+        Repeat until started
+        <input type="checkbox" checked={config.repeatReminder} onChange={e => onChange({ ...config, repeatReminder: e.target.checked })} className="accent-charcoal" />
+      </label>
+      <div className="border-t-[1px] border-border pt-4 flex flex-col gap-3">
+        <span className="font-sans text-xs uppercase tracking-wider opacity-60">Weekly schedule</span>
+        {config.schedule.map(item => (
+          <div key={item.day} className="grid grid-cols-[30px_1fr_72px] gap-2 items-center">
+            <span className="font-sans text-[10px] uppercase tracking-wider opacity-45">{DAY_NAMES[item.day]}</span>
+            <input type="text" value={item.label} disabled={item.rest} onChange={e => updateDay(item.day, { label: e.target.value })} className="min-w-0 bg-transparent border-[1px] border-border p-1.5 font-sans text-sm outline-none focus:border-charcoal disabled:opacity-25" />
+            <button onClick={() => updateDay(item.day, { rest: !item.rest, label: item.rest ? 'Workout' : 'Rest' })} className={`py-1.5 border-[1px] font-sans text-[9px] uppercase tracking-wider transition-all cursor-pointer ${item.rest ? 'border-border opacity-45 hover:opacity-80' : 'bg-charcoal border-charcoal text-bone'}`}>{item.rest ? 'Rest' : 'Workout'}</button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

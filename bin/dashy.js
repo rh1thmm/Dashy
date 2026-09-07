@@ -4,9 +4,11 @@ import { createServer } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createDashyApiHandler } from './api.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const dist = join(__dirname, '..', 'dist');
+const apiHandler = createDashyApiHandler();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -29,8 +31,9 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-const server = createServer((req, res) => {
-  let url = req.url.split('?')[0];
+const server = createServer(async (req, res) => {
+  if (await apiHandler(req, res)) return;
+  const url = req.url.split('?')[0];
   let filePath = join(dist, url === '/' ? 'index.html' : url);
 
   if (!existsSync(filePath) || extname(filePath) === '') {

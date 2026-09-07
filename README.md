@@ -12,7 +12,9 @@
 - **Weather** — current conditions + 3-day forecast; powered by wttr.in (no API key needed)
 - **Tasks** — checklist with progress bar; auto-removal after configurable delay
 - **Actions** — fire arbitrary HTTP requests from user-configured trigger buttons
-- **Persistent** — layout, backgrounds, grid settings, and widget configs saved to localStorage
+- **Docker** — live local Docker engine and container status, refreshed every 30 seconds
+- **Training** — scheduled workout reminders, a persistent session timer, rest days, and workout streaks
+- **Persistent** — layout, backgrounds, grid settings, and widget configs saved to a local SQLite database
 - **Canvas controls** — 9 background colors, grid line style/weight, noise overlay
 - **Edit mode** — add, remove, resize, and rearrange widgets freely (overlap blocked)
 - **Quiet Luxury aesthetic** — Bone White canvas, Playfair Display + Inter typography, spring-based micro-interactions
@@ -70,14 +72,24 @@ npm run build
 npm run preview
 ```
 
+## Publish to npm
+
+Pushing a tag matching the package version publishes a release automatically. For example, after changing `package.json` to `1.2.0`:
+
+```sh
+git tag v1.2.0
+git push origin v1.2.0
+```
+
+Before the first release, configure npm trusted publishing for `@rh1thmm/dashy` in npm package settings: select GitHub Actions, repository `rh1thmm/Dashy`, workflow `.github/workflows/publish-npm.yml`, and environment `npm`. The workflow verifies the tag/version match, builds the app, and publishes with npm provenance. No `NPM_TOKEN` is required.
+
 ## Usage
 
 1. Open the app in your browser.
 2. Click the **pencil** icon (bottom-right) to enter edit mode.
 3. Click the **Plus** icon to add widgets (one of each type allowed).
 4. Resize and rearrange tiles by dragging handles.
-5. Click the **Gear** icon on any widget to configure it.
-6. Click the **Palette** icon (bottom-right, edit mode) to change background, grid, and noise.
+5. Click the **Settings** icon (bottom-right, edit mode) to configure widgets, themes, canvas controls, and saved data.
 7. All state persists automatically.
 
 ## Widgets
@@ -88,6 +100,8 @@ npm run preview
 | **Weather** | Temp + icon | + location + 3-day forecast | + feelsLike/humidity/wind/pressure + 3-day forecast |
 | **Tasks** | Done/total count + progress bar | Checklist (5 items) with inline add | Full list + inline add |
 | **Actions** | Count + first trigger name | Scrollable list with method/status | 2-column card grid |
+| **Docker** | Running-container count | Engine summary + containers | Expanded container list |
+| **Training** | Today’s plan/timer + streak | Session controls + weekly progress | Weekly progress + recent sessions |
 
 ## Configuration
 
@@ -97,12 +111,23 @@ npm run preview
 
 ### Tasks
 - Remove completed tasks: Never / Instantly / After 1h / After 1d
-- Tasks are fully controlled from the Dashboard — all state saved to localStorage
+- Tasks are fully controlled from the Dashboard — all state saved to SQLite
 
 ### Actions (Triggers)
 - Each trigger has: label, URL, HTTP method, optional headers and body
 - Fires browser `fetch()` directly — CORS-dependent
 - Demo triggers pointing at `httpbin.org` included by default
+
+### Docker
+- Reads the local Docker socket first, then the Docker CLI, refreshing every 30 seconds
+- If direct Docker access is unavailable, Dashy tries `sudo -n docker` (passwordless sudo only)
+- Interactive sudo passwords cannot be requested from a web widget. Use the `docker` group, rootless Docker, a reachable `DOCKER_HOST`, or a narrowly scoped passwordless sudo rule for Docker.
+
+### Training
+- Set a reminder time and configure each weekday as a named workout or rest day
+- The in-app reminder repeats every 15 minutes until the scheduled workout starts (optional)
+- Start, pause, and end sessions; elapsed time and checkpoints survive refreshes
+- Streaks count consecutive completed workout days while ignoring scheduled rest days
 
 ### Canvas
 | Option | Values |
@@ -118,9 +143,9 @@ npm run preview
 
 ## Data Persistence
 
-All state is stored in `localStorage` under `monolith_dashboard_state` — widgets, layout, background, grid, noise settings.
+Dashy stores all dashboard state in SQLite at `~/.dashy/dashy.sqlite`, created automatically the first time `dashy` or `npm run dev` starts. Set `DASHY_DATA_DIR` to place the database elsewhere. Existing `localStorage` state is imported once on upgrade and then removed from the browser.
 
-No backend or server-side storage required.
+The built-in SQLite driver requires Node.js 22.5 or newer. The data directory and database are restricted to the current user because widget configuration can contain sensitive request headers.
 
 ## License
 
